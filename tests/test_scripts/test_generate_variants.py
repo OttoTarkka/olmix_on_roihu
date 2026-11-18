@@ -11,6 +11,7 @@ us a whole swarm and is invisible without a check like this one.
 """
 
 import json
+import struct
 import sys
 from pathlib import Path
 
@@ -21,10 +22,30 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 import generate_variants as gv  # noqa: E402
+from megatron_indexed import INDEX_HEADER  # noqa: E402
 
-# Must match calculate_num_tokens() in generate_variants.py. Worth promoting to
-# a module constant there so the two cannot drift apart.
-HEADER_OFFSET = 74
+# Megatron dtype codes (megatron_indexed.DTYPE_CODES) and their sizes in bytes.
+INT32 = (4, 4)
+UINT16 = (8, 2)
+
+
+def write_megatron_dataset(prefix, tokens, dtype=INT32):
+    """Write a valid Megatron dataset of one sequence with ``tokens`` tokens.
+
+    The .bin file is sparse (only its length matters to the generator), so even
+    millions of tokens take no disk space.
+    """
+    code, size = dtype
+    with open(f"{prefix}.idx", "wb") as f:
+        f.write(INDEX_HEADER)
+        f.write(struct.pack("<Q", 1))           # version
+        f.write(struct.pack("<B", code))        # dtype code
+        f.write(struct.pack("<QQ", 1, 2))       # one sequence, document index [0, 1]
+        f.write(struct.pack("<i", tokens))      # sequence length
+        f.write(struct.pack("<q", 0))           # sequence pointer
+        f.write(struct.pack("<qq", 0, 1))       # document indices
+    with open(f"{prefix}.bin", "wb") as f:
+        f.truncate(size * tokens)
 
 
 # Deliberately NOT in alphabetical order, and zeta dominates the prior.
@@ -52,11 +73,9 @@ SCALED = {"alpha": 300_000, "beta": 100_000, "mid:hi": 300_000,
 
 
 def write_config(tmp_path, datasets=DATASETS, extra_swarm=""):
-    """Create fake .bin shards of known size plus a config pointing at them."""
+    """Create Megatron datasets with known token counts plus a config pointing at them."""
     for name, tokens in TOKENS.items():
-        with open(tmp_path / f"{name}.bin", "wb") as f:
-            # the only thing that matters is the file's size
-            f.truncate(HEADER_OFFSET + 4 * tokens)
+        write_megatron_dataset(tmp_path / name, tokens)
     path = tmp_path / "config.yaml"
     path.write_text(
         "settings: {max_tokens: 1000000, repetition_factor: 5.0, seed: 7}\n"
@@ -97,9 +116,53 @@ def test_priors_are_built_in_that_order(tmp_path):
 
 def test_missing_shard_is_an_error_not_a_silent_drop(tmp_path):
     datasets = DATASETS + "  ghost:\n    paths: [{d}/does_not_exist]\n"
-    _, leaf_tokens, sources, _ = parse(write_config(tmp_path, datasets))
-    with pytest.raises(SystemExit, match="ghost"):
+    with pytest.raises(FileNotFoundError, match="does_not_exist"):
+        parse(write_config(tmp_path, datasets))
+
+
+def test_missing_bin_next_to_an_index_is_an_error(tmp_path):
+    config = write_config(tmp_path)
+    (tmp_path / "beta.bin").unlink()
+    with pytest.raises(FileNotFoundError, match="beta.bin"):
+        parse(config)
+
+
+def test_empty_dataset_is_an_error(tmp_path):
+    datasets = DATASETS + "  empty:\n    paths: [{d}/empty]\n"
+    config = write_config(tmp_path, datasets)
+    write_megatron_dataset(tmp_path / "empty", 0)
+    _, leaf_tokens, sources, _ = parse(config)
+    with pytest.raises(SystemExit, match="empty"):
         gv.calculate_priors_and_variants(leaf_tokens, sources)
+
+
+def test_empty_file_in_a_leaf_is_listed_and_left_out_of_the_mixes(tmp_path, capsys, monkeypatch):
+    """One empty cell among a leaf's files: the leaf keeps its tokens, the file gets no line."""
+    monkeypatch.chdir(tmp_path)  # the mix writer also writes launch_all_swarms.sh into the working directory
+    datasets = DATASETS.replace("[{d}/beta]", "[{d}/beta, {d}/beta_empty]")
+    config = write_config(tmp_path, datasets)
+    write_megatron_dataset(tmp_path / "beta_empty", 0)
+    _, leaf_tokens, _, prefix_map = parse(config)
+    assert leaf_tokens["beta"] == TOKENS["beta"]
+    assert "beta_empty" in capsys.readouterr().out
+
+    run_dir = tmp_path / "run"
+    (run_dir / "mixes").mkdir(parents=True)
+    variant = {"variant_id": "testrun-0000",
+               "mix": {leaf: {"weight": 0.2} for leaf in SCALED}}
+    gv.make_megatron_text_files_and_bash_script([variant], prefix_map, "testrun", str(run_dir))
+    text = (run_dir / "mixes" / "testrun-0000.txt").read_text()
+    assert "beta_empty" not in text
+    assert f"{tmp_path}/beta\n" in text
+
+
+def test_tokens_are_counted_from_the_index_not_the_file_size(tmp_path):
+    """A uint16 dataset (vocabulary under 65,500) has 2 bytes per token.
+
+    The old size-based count assumed 4 and would have halved this dataset.
+    """
+    write_megatron_dataset(tmp_path / "small_vocab", 1_000, dtype=UINT16)
+    assert gv.calculate_num_tokens(str(tmp_path / "small_vocab")) == 1_000
 
 
 # --------------------------------------------------------------------------
@@ -163,7 +226,8 @@ def test_same_seed_gives_the_same_swarm(tmp_path):
 # Mix files: what Megatron actually reads
 # --------------------------------------------------------------------------
 
-def test_mix_file_splits_a_dataset_over_its_shards_by_size(tmp_path):
+def test_mix_file_splits_a_dataset_over_its_shards_by_size(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)  # keeps the repository's launch_all_swarms.sh from being overwritten
     variants, prefix_map, run_dir = sample_swarm(tmp_path, write_config(tmp_path))
     gv.make_megatron_text_files_and_bash_script(variants, prefix_map, "testrun", str(run_dir))
 

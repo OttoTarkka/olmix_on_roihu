@@ -83,6 +83,12 @@ def read_results(results_dir: Path, variant_ids: list[str]) -> tuple[dict, list[
             warnings.append(f"{path.name}: no checkpoint path recorded")
             continue
 
+        # A --limit run scored only some documents; its BPB is not comparable.
+        limit = (payload.get("config") or {}).get("limit")
+        if limit is not None:
+            warnings.append(f"{path}: a --limit {limit} test run, ignored")
+            continue
+
         # Longest match wins, so 'swarm-1' does not shadow 'swarm-11'.
         matches = sorted((v for v in variant_ids if v in checkpoint), key=len, reverse=True)
         if not matches:

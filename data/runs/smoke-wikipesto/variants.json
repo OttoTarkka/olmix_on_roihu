@@ -1,0 +1,11 @@
+[
+  {
+    "variant_id": "smoke-wikipesto-0000",
+    "mix": {
+      "wikipesto": {
+        "weight": 1.0,
+        "repetition_factor": 1.0
+      }
+    }
+  }
+]

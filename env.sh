@@ -32,7 +32,15 @@ export OLMIX_PYTHON="$OLMIX_REPO/hpc/roihu/eval_python.sh"
 # The Megatron-LM checkout that prepare_venv.sh installed into TRAIN_VENV
 # (tag core_v0.16.1). pretrain_gpt.py imports megatron.core from its own
 # directory, so this must be the same checkout as the installed one.
-MEGATRON_DIR="${MEGATRON_DIR:-$(cd "$OLMIX_REPO/../roihu-megatron-gpt/Megatron-LM" 2>/dev/null && pwd)}"
+# (Resolved without a failing command: env.sh is sourced by `set -e` scripts,
+# which would otherwise exit silently when the directory is missing.
+# train-0.05B.sh reports a missing pretrain_gpt.py itself.)
+if [[ -z "${MEGATRON_DIR:-}" ]]; then
+    MEGATRON_DIR="$OLMIX_REPO/../roihu-megatron-gpt/Megatron-LM"
+    if [[ -d "$MEGATRON_DIR" ]]; then
+        MEGATRON_DIR="$(cd "$MEGATRON_DIR" && pwd)"
+    fi
+fi
 export MEGATRON_DIR
 export TOKENIZER_MODEL="${TOKENIZER_MODEL:-openeurollm/tokenizer-256k}"
 # Outputs live under output/ in this repository, in subdirectories: output/

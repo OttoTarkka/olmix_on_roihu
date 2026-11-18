@@ -141,15 +141,20 @@ def test_manual_prior_names_are_sources_or_existing(config):
 
 @pytest.mark.data
 def test_every_bin_file_exists(config):
-    """Only meaningful on LUMI with the data mounted: run with -m data."""
+    """Only meaningful where the config's data exists: run with -m data.
+
+    Checks both files of every prefix: Megatron reads the .bin, and the
+    generator takes the token counts from the .idx.
+    """
     datasets = yaml.safe_load(config.read_text())["datasets"]
     missing = []
     for spec in datasets.values():
         for prefix in prefixes_of(spec):
-            path = Path(f"{prefix}.bin")
-            try:
-                if not path.is_file():
-                    missing.append(str(path))
-            except OSError as e:
-                missing.append(f"{path} ({e.strerror})")
-    assert not missing, f"{len(missing)} unusable .bin file(s), e.g. {missing[0]}"
+            for suffix in (".bin", ".idx"):
+                path = Path(f"{prefix}{suffix}")
+                try:
+                    if not path.is_file():
+                        missing.append(str(path))
+                except OSError as e:
+                    missing.append(f"{path} ({e.strerror})")
+    assert not missing, f"{len(missing)} unusable .bin/.idx file(s), e.g. {missing[0]}"

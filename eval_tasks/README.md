@@ -85,13 +85,28 @@ that every task file's `include` and `!function` references resolve, and that
 every task in the three groups names its few-shot split. It does not need
 lm-eval.
 
+## Checked on Roihu
+
+- Prompt length (`scripts/check_prompt_lengths.py`, 2026-11-18): no 5-shot
+  prompt of the 18 group tasks is cut to the proxies' 2,048 positions.
+  The longest is 1,923 tokens (`okapi_mmlu_hu_bpb`); Belebele's longest is 1,272.
+
+  | Documents per task | de | es | hu |
+  |---|---:|---:|---:|
+  | Okapi HellaSwag | 9,368 | 9,374 | 9,119 |
+  | Okapi ARC | 1,169 | 1,170 | 1,168 |
+  | Okapi MMLU | 13,258 | 13,334 | 13,024 |
+  | Belebele | 900 | 900 | 900 |
+  | Global PIQA | 103 | 103 | 103 |
+  | INCLUDE | 139 | 550 | 550 |
+
+  The small tasks (Global PIQA, German INCLUDE) give noisier BPB.
+- A full 5-shot run of `olmix_bpb_hun` on a converted proxy: 7.5 minutes,
+  every task reports `bits_per_byte`.
+
 ## Not yet checked
 
-- Loading and scoring through lm-eval itself, which needs the eval venv on
-  Roihu: run the quick test above first.
-- Prompt length: the proxies have 2,048 positions, and lm-eval cuts longer
-  contexts from the left. Five Belebele passages may not fit.
-- `datasets` must be below 4 for the FLORES tasks, because `facebook/flores`
-  uses a loading script. olmix pins `datasets>=3,<4` too.
-- Whether INCLUDE or Global-MMLU need an accepted licence on the Hub (then set
-  `HF_TOKEN`).
+- The tasks outside the three groups (English benchmarks, Global-MMLU, FLORES,
+  ...) have not been run on Roihu. Global-MMLU may need an accepted licence on
+  the Hub (then set `HF_TOKEN`). FLORES needs `datasets` below 4, because
+  `facebook/flores` uses a loading script; the eval venv has 3.6.

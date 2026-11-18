@@ -8,6 +8,10 @@ from olmix.aliases import SourceConfig, QualityConfig, TopicConfig
 from olmix.generate.synthesize_mixture import generate_weights_dirichlet
 import sys
 import shutil
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from megatron_indexed import open_dataset  # noqa: E402
 
 
 def get_configs(config):
@@ -15,14 +19,26 @@ def get_configs(config):
         config = yaml.safe_load(f)
     return config["settings"], config.get("swarm", {}), config["datasets"]
 
-def calculate_num_tokens(bin_path):
-    if not os.path.exists(bin_path):
-        print(f"⚠️ Warning: File not found - {bin_path}")
-        return 0
-    header_offset = 74 
-    bytes_per_token = 4 
-    file_size = os.path.getsize(bin_path)
-    return (file_size - header_offset) // bytes_per_token
+def calculate_num_tokens(prefix: str) -> int:
+    """Number of tokens in a Megatron dataset, from its index.
+
+    Reads ``<prefix>.idx`` and checks that ``<prefix>.bin`` exists and is as
+    long as the index says. This replaces an estimate from the .bin file size
+    (minus a guessed 74-byte header, at 4 bytes per token), which was only
+    right for int32 tokens and counted a missing file as 0 tokens with only a
+    warning.
+
+    Args:
+        prefix: dataset path without the .bin/.idx suffix.
+
+    Returns:
+        The token count over all sequences.
+
+    Raises:
+        FileNotFoundError: if either file is missing.
+        ValueError: if the index is malformed or the .bin is too short.
+    """
+    return open_dataset(Path(prefix)).num_tokens
 
 def parse_yaml(datasets_config):
     sources = []
@@ -42,7 +58,7 @@ def parse_yaml(datasets_config):
                 for prefix in q_prefixes:
                     bin_path = f"{prefix}.bin"
                     q_bin_paths.append(bin_path)
-                    tokens = calculate_num_tokens(bin_path)
+                    tokens = calculate_num_tokens(prefix)
                     total_tokens += tokens
                     shard_info.append((prefix, tokens))
 
@@ -62,13 +78,23 @@ def parse_yaml(datasets_config):
             for prefix in prefixes:
                 bin_path = f"{prefix}.bin"
                 bin_paths.append(bin_path)
-                tokens = calculate_num_tokens(bin_path)
+                tokens = calculate_num_tokens(prefix)
                 total_tokens += tokens
                 shard_info.append((prefix, tokens))
 
             sources.append(SourceConfig(name=source_name, paths=bin_paths))
             prefix_map[source_name] = shard_info
             leaf_tokens[source_name] = total_tokens * multiplier
+
+    # Empty files (e.g. a language x topic x format cell with no documents)
+    # get no weight and are left out of the mix files. Say which, so a file
+    # that should not be empty is noticed. A leaf with no tokens at all stops
+    # the run in calculate_priors_and_variants.
+    empty = [prefix for shards in prefix_map.values() for prefix, tokens in shards if tokens == 0]
+    if empty:
+        print(f"Note: {len(empty)} empty dataset file(s), left out of the mixes:")
+        for prefix in empty:
+            print(f"  {prefix}")
 
     return leaf_tokens, sources, prefix_map
 
@@ -193,7 +219,8 @@ def make_megatron_text_files_and_bash_script(lumi_variants, prefix_map, run_pref
                     total_actual_tokens = sum(tokens for _, tokens in shard_info)
 
                     for prefix, tokens in shard_info:
-                        if total_actual_tokens > 0:
+                        # Empty files get no weight; parse_yaml lists them.
+                        if total_actual_tokens > 0 and tokens > 0:
                             shard_weight = domain_weight * (tokens / total_actual_tokens)
                             f.write(f"{shard_weight:.6f} {prefix}\n")
 

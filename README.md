@@ -29,11 +29,11 @@ configs/<experiment>.yaml
 | Conversion | `scripts/convert_to_hf.sh` + `scripts/megatron_to_hf.py`: direct Megatron → Qwen3 conversion | locally only; Roihu check pending |
 | Evaluation | `scripts/eval_bpb.sh`: lm-evaluation-harness, 5-shot BPB, one task group per language | on a public model (20 documents per task) |
 | Collection and fit | `scripts/collect_bpb.py`, `olmix fit` | collection on synthetic results; no fit yet |
-| One-command pipeline | `scripts/run_pipeline.sh`, `scripts/pipeline/*` | **not ported**: still calls the LUMI conversion and oellm-eval. Run the steps by hand (below). |
+| One-command pipeline | `scripts/run_pipeline.sh`: conversion, evaluation batches, collection and fit as dependent jobs | dry run with a stand-in `sbatch` |
 
 There is no Roihu experiment config yet: the data (HPLT web documents labelled
-with WebOrganizer topics and formats) is still being prepared. The configs in
-`configs/` are LUMI examples, with LUMI paths.
+with WebOrganizer topics and formats) is still being prepared. The LUMI
+configs were removed; they are in the LUMI repository.
 
 Measured on one GH200 with the 256k-vocabulary tokenizer:
 
@@ -43,13 +43,15 @@ Measured on one GH200 with the 256k-vocabulary tokenizer:
 | Full proxy run | about 5.7 h for 3B tokens (22,889 iterations, including in-training evaluation) |
 | GPU memory | 52 GB allocated, 84 of 95 GB reserved at micro batch 16; micro batch 32 runs out of memory |
 | Conversion | under a minute per model |
+| Evaluation | 7.5 min per model for one language's six tasks, 5-shot |
+| Prompt length | No 5-shot prompt of the 18 tasks exceeds the 2,048 positions; the longest is 1,923 tokens (Hungarian MMLU), Belebele's 1,272 (`scripts/check_prompt_lengths.py`) |
 
 ## Repository layout
 
 | Path | What it is |
 | --- | --- |
 | `env.sh` | Shared settings; every script sources it |
-| `configs/*.yaml` | Experiment definitions (LUMI examples for now) |
+| `configs/*.yaml` | Experiment definitions (none yet) |
 | `data/runs/<run>/` | One swarm: its config, `variants.json`, `fit.yaml` and mixes |
 | `scripts/generate_variants.py` | Samples the mixtures with olmix and writes the fit config |
 | `scripts/train-0.05B.sh` | One proxy training run; submitted as an array |
@@ -59,8 +61,10 @@ Measured on one GH200 with the 256k-vocabulary tokenizer:
 | `scripts/eval_bpb.sh` | BPB evaluation with lm-eval |
 | `eval_tasks/bpb/` | The lm-eval task definitions; see [`eval_tasks/README.md`](eval_tasks/README.md) |
 | `scripts/collect_bpb.py` | Evaluation results + `variants.json` → `ratios.csv`, `metrics.csv` |
+| `scripts/run_pipeline.sh`, `scripts/pipeline/collect_and_fit.sh` | Everything after training as dependent jobs |
 | `scripts/make_fake_fit_inputs.py` | Fake scores from a known rule, to check the fit recovers it |
 | `scripts/check_eval_env.py` | Checks the eval venv |
+| `scripts/check_prompt_lengths.py` | Counts the evaluation prompts lm-eval would cut to the model's context |
 | `hpc/roihu/` | Eval venv build, its requirements and the `$OLMIX_PYTHON` wrapper |
 | `tests/` | pytest tests |
 | `output/` | Outputs; see below |
@@ -199,7 +203,12 @@ datasets:
 ```
 
 A dataset may instead have `quality:` buckets, which become separate leaves
-named `source:bucket`. A dataset with several paths is one leaf; its weight is
+named `source:bucket`.
+
+Token counts come from each prefix's `.idx` file (`scripts/megatron_indexed.py`).
+A missing `.bin` or `.idx` stops the generator. Empty files, such as a cell with
+no documents, are listed and left out of the mix files, and a leaf with no
+tokens at all stops the generator. A dataset with several paths is one leaf; its weight is
 split across the paths in proportion to their token counts. That is how
 WebOrganizer topic × format cells can be grouped into topic or format domains
 without re-tokenizing.
@@ -288,9 +297,27 @@ Overrides, set in the environment when submitting:
 A variant that already reached its last iteration exits at once, so the array
 can be resubmitted to fill in failed tasks. Requeued tasks append to their logs.
 
-### 4. Convert to HuggingFace
+### 4–7. Convert, evaluate, collect and fit in one command
 
 When the training array has finished:
+
+```bash
+./scripts/run_pipeline.sh <run> <deu|spa|hun>          # stops after collecting
+./scripts/run_pipeline.sh <run> <deu|spa|hun> --fit    # also fits with data/runs/<run>/fit.yaml
+```
+
+It checks that every variant has a checkpoint, then submits at once: the
+conversion job, evaluation jobs of `EVAL_BATCH` models each (default 8, about
+an hour), and the collect (and fit) job. Each waits for the previous stage
+with `afterok`. If a job fails, the later ones stay pending with reason
+`DependencyNeverSatisfied`: cancel them, fix the cause, and run the pipeline
+again. Finished conversions and evaluations are skipped. Edit `fit.yaml`
+before using `--fit`; the steps below describe what each stage does and how to
+run it by hand.
+
+### 4. Convert to HuggingFace
+
+By hand:
 
 ```bash
 sbatch scripts/convert_to_hf.sh <run>
@@ -321,10 +348,11 @@ done
 `eval_bpb.sh <deu|spa|hun> <model> [...]` evaluates its models one after
 another on one GPU, 5-shot, on the language's six BPB tasks: Okapi HellaSwag,
 ARC and MMLU, Belebele, Global PIQA and INCLUDE. Results go to
-`$EVAL_OUTPUT_DIR/<language>/<model name>/`. The batch of 8 above is a guess:
-the time per model has not been measured yet. Time one full evaluation before
-choosing. The tasks, their few-shot examples and their origin are described in
-[`eval_tasks/README.md`](eval_tasks/README.md).
+`$EVAL_OUTPUT_DIR/<language>/<model name>/`. One model takes about 7.5 minutes,
+so a batch of 8 takes about an hour. Models with complete results are skipped,
+while results of a `LIMIT` test run don't count, so a resubmitted batch only
+evaluates what is missing. The tasks, their few-shot examples and their origin
+are described in [`eval_tasks/README.md`](eval_tasks/README.md).
 
 ### 6. Collect
 
@@ -338,8 +366,9 @@ $OLMIX_PYTHON scripts/collect_bpb.py \
 This writes `ratios.csv` (mixture weights) and `metrics.csv` (one BPB column per
 task) for the variants it finds, matching each result to a variant by the model
 path recorded in it. It warns about results that match no variant (such as the
-smoke-test models), variants without results, and implausible values, and it
-stops if a variant has results from two different checkpoints.
+smoke-test models), variants without results, results of `--limit` test runs
+(which it ignores), and implausible values. It stops if a variant has results
+from two different checkpoints.
 
 Columns with "mmlu" in their name are written with "MMLU" (for example
 `okapi_MMLU_hu_bpb`). `olmix fit` would otherwise apply its English-MMLU
@@ -367,8 +396,9 @@ regression, proposer and constraints for the experiment:
 To check that the fit works before real results exist,
 `scripts/make_fake_fit_inputs.py` writes fake scores that follow a known rule.
 
-There is no batch script for the fit yet. A small fit runs on the login node;
-for a large one, use a short GPU job.
+`run_pipeline.sh ... --fit` runs the fit in a GPU job
+(`scripts/pipeline/collect_and_fit.sh`). By hand, a small fit runs on the login
+node. olmix caches regressions in `./cache`, which git ignores.
 
 #### Reading the result of a reuse swarm
 
@@ -397,19 +427,12 @@ Megatron's own; that part is skipped unless a Megatron-LM checkout is on
 
 ## Known issues and to do
 
-- `scripts/run_pipeline.sh` and `scripts/pipeline/*` still use the LUMI
-  conversion and oellm-eval. Run steps 4–7 by hand until they are ported.
-- `scripts/generate_variants.py` counts tokens assuming 4 bytes per token
-  (right only for vocabularies over 65k, such as the 256k tokenizer), and
-  treats a missing `.bin` file as 0 tokens with only a warning.
-  `scripts/megatron_indexed.count_tokens` reads the count from the `.idx` file
-  instead.
-- The configs in `configs/` point at LUMI paths, and `configs/config.yaml` at
-  `data/stage_1_optimal.json`, which is not in this repository.
 - `requirements.txt` is a freeze of a LUMI environment and is not used; the
   eval venv's requirements are in `hpc/roihu/eval_venv_requirements.txt`.
-- The proxies have 2,048 positions, and lm-eval cuts longer prompts from the
-  left. Check whether 5-shot Belebele prompts are cut on the first real models.
+- Some fit tasks are small: Global PIQA has 103 documents per language and
+  German INCLUDE 139, so their BPB is noisier than HellaSwag's (about 9,300) or
+  MMLU's (about 13,000). Check in a first small experiment whether they separate
+  mixtures at all, and weight or drop them in the fit accordingly.
 - Megatron's fused cross-entropy (`--cross-entropy-loss-fusion`) might allow
   micro batch 32 and faster training, but Megatron marks it as
   non-deterministic. Untested.

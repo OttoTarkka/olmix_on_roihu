@@ -133,7 +133,11 @@ def open_dataset(prefix: Path) -> IndexedDataset:
     bin_path = Path(f"{prefix}.bin")
     if not bin_path.is_file():
         raise FileNotFoundError(f"no data file: {bin_path}")
-    tokens = np.memmap(bin_path, mode="r", dtype=dtype)
+    # numpy cannot memory-map an empty file; an empty dataset is simply no tokens.
+    if bin_path.stat().st_size == 0:
+        tokens = np.empty(0, dtype=dtype)
+    else:
+        tokens = np.memmap(bin_path, mode="r", dtype=dtype)
     if lengths.shape[0]:
         end = int(pointers[-1]) // dtype.itemsize + int(lengths[-1])
         if end > tokens.shape[0]:

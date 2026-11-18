@@ -7,5 +7,8 @@ output/eval/
 # SLURM job logs
 logs/
 
+# olmix fit's regression cache (written to ./cache in the working directory)
+cache/
+
 # Python caches
 __pycache__/

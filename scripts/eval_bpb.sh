@@ -63,9 +63,14 @@ if [[ -z "${HF_HOME:-}" ]]; then
     exit 1
 fi
 
-# A local model must be a complete HuggingFace directory; anything that is not
-# an existing path is passed on as a Hub ID.
+# A local model must be a complete HuggingFace directory. Arguments starting
+# with / or . are always local paths (a missing one is an error, not a Hub ID
+# to download); any other argument that is not an existing path is a Hub ID.
 for model in "$@"; do
+    if [[ "$model" == /* || "$model" == .* ]] && [[ ! -e "$model" ]]; then
+        echo "[error] no such model directory: $model" >&2
+        exit 1
+    fi
     if [[ -e "$model" ]]; then
         [[ -f "$model/config.json" ]] || { echo "[error] no config.json in $model" >&2; exit 1; }
         ls "$model"/*.safetensors >/dev/null 2>&1 || { echo "[error] no *.safetensors in $model" >&2; exit 1; }
@@ -99,6 +104,15 @@ echo
 for model in "$@"; do
     name="$(basename "$model")"
     output_path="$EVAL_OUTPUT_DIR/$LANGUAGE/$name"
+    # Already evaluated (lm-eval writes <output_path>/<model>/results_<time>.json)?
+    # Then skip it, so a resubmitted batch does not redo finished models. Only
+    # a full run counts: lm-eval records "limit": null in its config then; the
+    # results of a --limit test run are incomplete.
+    if [[ -z "${LIMIT:-}" ]] && compgen -G "$output_path/*/results_*.json" >/dev/null \
+        && grep -q '"limit": null' "$output_path"/*/results_*.json; then
+        echo "=== $model: already evaluated in $output_path, skipping"
+        continue
+    fi
     echo "=== $model -> $output_path ($(date))"
     srun --ntasks=1 lm-eval run \
         --model hf \
