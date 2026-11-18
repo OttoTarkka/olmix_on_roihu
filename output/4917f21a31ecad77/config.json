@@ -1,0 +1,62 @@
+{
+  "swarm": {
+    "ratios": "/scratch/project_465002530/users/tarkkaot/olmix_tool/olmix_on_lumi/data/eval_metrics/ratios.csv",
+    "metrics": "/scratch/project_465002530/users/tarkkaot/olmix_tool/olmix_on_lumi/data/eval_metrics/metrics.csv"
+  },
+  "priors": {
+    "relative_sizes": {
+      "ces_Latn": 0.01974998,
+      "deu_Latn": 0.188664029,
+      "ell_Grek": 0.020711888,
+      "fra_Latn": 0.196560015,
+      "ita_Latn": 0.058600798,
+      "lit_Latn": 0.004827756,
+      "nld_Latn": 0.034423502,
+      "pol_Latn": 0.046872003,
+      "por_Latn": 0.066396759,
+      "ron_Latn": 0.017780348,
+      "spa_Latn": 0.215385802,
+      "swe_Latn": 0.019818823,
+      "nemotron-ha-10p-sample": 0.110208296
+    },
+    "token_counts": {
+      "ces_Latn": 98094915907,
+      "deu_Latn": 937063315376,
+      "ell_Grek": 102872552479,
+      "fra_Latn": 976281383405,
+      "ita_Latn": 291060562258,
+      "lit_Latn": 23978673140,
+      "nld_Latn": 170975895672,
+      "pol_Latn": 232805559707,
+      "por_Latn": 329781819347,
+      "ron_Latn": 88312074640,
+      "spa_Latn": 1069785981358,
+      "swe_Latn": 98436847859,
+      "nemotron-ha-10p-sample": 547386548541
+    }
+  },
+  "eval": null,
+  "regression": {
+    "type": "log_linear",
+    "seed": 0,
+    "n_test": 0,
+    "train_split": 1.0,
+    "aggregate_task_families": false
+  },
+  "proposer": {
+    "type": "exact",
+    "temperature": null,
+    "kl_reg": 0.1,
+    "fit_only": false,
+    "make_worst_mix": false
+  },
+  "constraints": {
+    "enabled": false,
+    "target_tokens": null,
+    "repetition_factor": 4.0
+  },
+  "filtering": {
+    "drop_metrics": [],
+    "obj_weights": {}
+  }
+}

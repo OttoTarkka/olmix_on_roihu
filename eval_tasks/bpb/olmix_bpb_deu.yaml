@@ -1,0 +1,12 @@
+# Fit targets for the deu Olmix swarm: one BPB metric per task, no group
+# average (olmix fits each metric separately). Added for olmix_on_roihu.
+group: olmix_bpb_deu
+task:
+  - okapi_hellaswag_de_bpb
+  - okapi_arc_de_bpb
+  - okapi_mmlu_de_bpb
+  - belebele_deu_Latn_bpb
+  - global_piqa_deu_latn_bpb
+  - include_base_44_german_bpb
+metadata:
+  version: 1.0

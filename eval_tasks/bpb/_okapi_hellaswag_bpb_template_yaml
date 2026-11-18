@@ -1,0 +1,25 @@
+# Okapi HellaSwag (machine-translated HellaSwag validation set) with BPB of
+# the correct ending. Same prompt as hellaswag_bpb.yaml; per-language tasks
+# live in okapi_hellaswag/. Added for olmix_on_roihu.
+#
+# The dataset has only a "val" split. It is declared as the test split so
+# that few-shot examples drawn from it never include the document being
+# scored: lm-eval removes the scored document only when fewshot_split equals
+# test_split.
+include: _bpb_template_yaml
+tag:
+  - bpb
+  - bpb_multilingual
+  - okapi_hellaswag_bpb
+dataset_path: alexandrainst/m_hellaswag
+training_split: null
+validation_split: null
+test_split: val
+fewshot_split: val
+fewshot_config:
+  sampler: first_n
+process_docs: !function utils.process_docs_hellaswag
+doc_to_text: "{{query}}"
+doc_to_target: "{{gold}}"
+doc_to_choice: "choices"
+process_results: !function utils.process_results_hellaswag

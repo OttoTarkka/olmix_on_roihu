@@ -1,0 +1,20 @@
+# Global PIQA, parallel split, with BPB of the correct solution. Same prompt and
+# choices as the upstream global_piqa_parallel_cloze_<lang> tasks; per-language
+# tasks live in global_piqa/. Added for olmix_on_roihu.
+#
+# Only a test split exists, so few-shot examples come from it; lm-eval leaves
+# out the document being scored because fewshot_split equals test_split.
+include: _bpb_template_yaml
+tag:
+  - bpb
+  - bpb_multilingual
+  - global_piqa_bpb
+dataset_path: mrlbenchmarks/global-piqa-parallel
+test_split: test
+fewshot_split: test
+fewshot_config:
+  sampler: first_n
+doc_to_text: prompt
+doc_to_target: label
+doc_to_choice: "{{[solution0, solution1, solution2, solution3]}}"
+process_results: !function utils.process_results_global_piqa

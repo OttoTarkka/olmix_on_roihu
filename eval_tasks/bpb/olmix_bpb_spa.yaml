@@ -1,0 +1,12 @@
+# Fit targets for the spa Olmix swarm: one BPB metric per task, no group
+# average (olmix fits each metric separately). Added for olmix_on_roihu.
+group: olmix_bpb_spa
+task:
+  - okapi_hellaswag_es_bpb
+  - okapi_arc_es_bpb
+  - okapi_mmlu_es_bpb
+  - belebele_spa_Latn_bpb
+  - global_piqa_spa_latn_spai_bpb
+  - include_base_44_spanish_bpb
+metadata:
+  version: 1.0

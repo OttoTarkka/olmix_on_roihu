@@ -1,0 +1,23 @@
+# Okapi ARC (machine-translated ARC-Challenge) with BPB of the correct
+# option. Same prompt as the upstream lm-eval arc_<lang> tasks; per-language
+# tasks live in okapi_arc/. Added for olmix_on_roihu.
+#
+# The dataset's splits are train, val and test (the upstream lm-eval task
+# files name the second one "validation", which does not exist).
+include: _bpb_template_yaml
+tag:
+  - bpb
+  - bpb_multilingual
+  - okapi_arc_bpb
+dataset_path: alexandrainst/m_arc
+training_split: train
+validation_split: val
+test_split: test
+fewshot_split: train
+fewshot_config:
+  sampler: first_n
+process_docs: !function utils.process_docs_okapi_arc
+doc_to_text: "{{query}}"
+doc_to_target: "{{gold}}"
+doc_to_choice: "choices"
+process_results: !function utils.process_results_okapi_arc

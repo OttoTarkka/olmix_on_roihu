@@ -1,0 +1,11 @@
+# Run outputs (proxy checkpoints are about 1 GB each). The LUMI fit results
+# directly under output/ stay tracked.
+output/runs/
+output/tests/
+output/eval/
+
+# SLURM job logs
+logs/
+
+# Python caches
+__pycache__/

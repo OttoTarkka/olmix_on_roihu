@@ -1,0 +1,12 @@
+# Fit targets for the hun Olmix swarm: one BPB metric per task, no group
+# average (olmix fits each metric separately). Added for olmix_on_roihu.
+group: olmix_bpb_hun
+task:
+  - okapi_hellaswag_hu_bpb
+  - okapi_arc_hu_bpb
+  - okapi_mmlu_hu_bpb
+  - belebele_hun_Latn_bpb
+  - global_piqa_hun_latn_bpb
+  - include_base_44_hungarian_bpb
+metadata:
+  version: 1.0

@@ -1,0 +1,38 @@
+# Packages for the olmix eval venv, on top of the python-pytorch/2.13 module.
+# Installed by hpc/roihu/prepare_eval_venv.sh with a constraints file that
+# pins torch and numpy to the module's versions.
+#
+# olmix itself is installed with --no-deps, and its dependencies are listed
+# here instead: olmix/pyproject.toml takes ai2-olmo-core from the git branch
+# add-inloop-evals, which no longer exists on GitHub. The commit below is the
+# one olmix/uv.lock pins (2026-02-04). ai2-olmo-core's [eval] extra
+# (ai2-olmo-eval) and olmix's beaker extra are left out: generate_variants.py
+# and `olmix fit` don't import them.
+
+# --- olmix dependencies (olmix/pyproject.toml) ---
+ai2-olmo-core @ git+https://github.com/allenai/OLMo-core.git@58c0c38917716d1984610d8d6bd9ba977a028d0b
+boto3
+click
+cvxpy
+# Below 4 also for the FLORES BPB tasks: facebook/flores uses a loading script.
+datasets>=3,<4
+ecos
+gcsfs
+lightgbm
+matplotlib
+numpy
+pandas
+pyarrow<21
+pydantic
+pyyaml
+s3fs
+scikit-learn
+scipy
+seaborn
+statsmodels
+tqdm
+wandb
+yaspin
+
+# --- tests ---
+pytest

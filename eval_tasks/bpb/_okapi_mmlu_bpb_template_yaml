@@ -1,0 +1,18 @@
+# Okapi MMLU (machine-translated MMLU, all subjects in one task) in cloze form,
+# like _global_mmlu_bpb_template_yaml: the continuation is the answer text,
+# not its letter. Per-language tasks live in okapi_mmlu/. Added for
+# olmix_on_roihu.
+include: _bpb_template_yaml
+tag:
+  - bpb
+  - bpb_multilingual
+  - okapi_mmlu_bpb
+dataset_path: alexandrainst/m_mmlu
+test_split: test
+fewshot_split: train
+fewshot_config:
+  sampler: first_n
+doc_to_text: "Question: {{instruction.strip()}}\nAnswer:"
+doc_to_target: !function utils.doc_to_target_okapi_mmlu
+doc_to_choice: !function utils.doc_to_choice_okapi_mmlu
+process_results: !function utils.process_results_okapi_mmlu
